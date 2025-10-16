@@ -751,11 +751,14 @@ export default function Dashboard() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                             </svg>
                             <p className="text-sm text-gray-400 font-medium">
-                              {new Date(session.timestamp).toLocaleDateString('en-US', { 
-                                month: 'short', 
-                                day: 'numeric',
-                                year: 'numeric'
-                              })}
+                              {session.timestamp && !isNaN(new Date(session.timestamp).getTime())
+                                ? new Date(session.timestamp).toLocaleDateString('en-US', { 
+                                    month: 'short', 
+                                    day: 'numeric',
+                                    year: 'numeric'
+                                  })
+                                : 'Recent'
+                              }
                             </p>
                           </div>
                         </div>

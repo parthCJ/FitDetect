@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from app.core.security import get_current_user
 from app.db.mongodb import get_collection
 from app.models.session import Session, SessionCreate, SessionUpdate
+from app.utils.calorie_calculator import calculate_calories
 from typing import List, Optional
 from datetime import datetime, timedelta
 from bson import ObjectId
@@ -21,6 +22,7 @@ async def create_session(
         
         session_dict = session.model_dump()
         session_dict["user_id"] = current_user["id"]
+        session_dict["timestamp"] = datetime.utcnow()
         session_dict["created_at"] = datetime.utcnow()
         session_dict["updated_at"] = datetime.utcnow()
         session_dict["reps"] = 0
@@ -99,6 +101,22 @@ async def update_session(
         
         update_data = session_update.model_dump(exclude_unset=True)
         update_data["updated_at"] = datetime.utcnow()
+        
+        # Auto-calculate calories if reps and duration are provided
+        if "reps" in update_data and "duration" in update_data:
+            reps = update_data["reps"]
+            duration = update_data["duration"]
+            exercise_type = existing_session.get("exercise_type", "pushup")
+            
+            # Calculate calories (using default 70kg body weight)
+            # TODO: Get user's actual weight from user profile
+            calories = calculate_calories(
+                reps=reps,
+                duration_seconds=duration,
+                exercise_type=exercise_type,
+                body_weight_kg=70  # Default weight
+            )
+            update_data["calories_burned"] = calories
         
         await sessions_collection.update_one(
             {"_id": ObjectId(session_id)},
