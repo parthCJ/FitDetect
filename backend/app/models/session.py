@@ -34,7 +34,6 @@ class Session(BaseModel):
         }
 
 class SessionCreate(BaseModel):
-    user_id: str
     exercise_name: str
     exercise_type: str
 
