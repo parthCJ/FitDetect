@@ -45,8 +45,9 @@ export default function ExercisePage() {
 
   const fetchTodayGoal = async () => {
     try {
+      const today = new Date().toISOString().split('T')[0]
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/goals/exercise/${exerciseType}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/goals/today?exercise_type=${exerciseType}`,
         {
           headers: {
             Authorization: `Bearer ${(session as any)?.accessToken}`,
@@ -55,8 +56,10 @@ export default function ExercisePage() {
       )
       if (response.ok) {
         const data = await response.json()
-        if (data) {
-          setTodayGoal(data)
+        // data is an array, find the goal for this exercise type
+        const goalForExercise = data.find((g: any) => g.exercise_type === exerciseType)
+        if (goalForExercise) {
+          setTodayGoal(goalForExercise)
         }
       }
     } catch (error) {

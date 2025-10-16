@@ -23,11 +23,18 @@ async def create_session(
         session_dict["user_id"] = current_user["id"]
         session_dict["created_at"] = datetime.utcnow()
         session_dict["updated_at"] = datetime.utcnow()
+        session_dict["reps"] = 0
+        session_dict["completed"] = False
         
         result = await sessions_collection.insert_one(session_dict)
-        session_dict["_id"] = str(result.inserted_id)
         
-        return session_dict
+        return {
+            "session_id": str(result.inserted_id),
+            "exercise_name": session_dict["exercise_name"],
+            "exercise_type": session_dict["exercise_type"],
+            "reps": 0,
+            "completed": False
+        }
         
     except Exception as e:
         raise HTTPException(
