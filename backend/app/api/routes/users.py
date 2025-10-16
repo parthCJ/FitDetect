@@ -95,11 +95,17 @@ async def get_user_history(
     
     cursor = sessions_collection.find(
         {"user_id": current_user["id"]}
-    ).sort("created_at", -1).limit(limit)
+    ).sort("timestamp", -1).limit(limit)
     
     sessions = await cursor.to_list(length=limit)
     
     for session in sessions:
         session['_id'] = str(session['_id'])
+        # Ensure timestamp is ISO format string
+        if 'timestamp' in session and isinstance(session['timestamp'], datetime):
+            session['timestamp'] = session['timestamp'].isoformat()
+        # Fallback to created_at if timestamp doesn't exist
+        elif 'created_at' in session and isinstance(session['created_at'], datetime):
+            session['timestamp'] = session['created_at'].isoformat()
     
     return {"sessions": sessions}

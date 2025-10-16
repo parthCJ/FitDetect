@@ -19,6 +19,7 @@ export default function ExercisePage() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [duration, setDuration] = useState(0)
   const [startTime, setStartTime] = useState<number | null>(null)
+  const [calories, setCalories] = useState(0)
   const [todayGoal, setTodayGoal] = useState<{
     id: string
     target_count: number
@@ -45,8 +46,9 @@ export default function ExercisePage() {
 
   const fetchTodayGoal = async () => {
     try {
+      const today = new Date().toISOString().split('T')[0]
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/goals/exercise/${exerciseType}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/goals/today?exercise_type=${exerciseType}`,
         {
           headers: {
             Authorization: `Bearer ${(session as any)?.accessToken}`,
@@ -55,8 +57,10 @@ export default function ExercisePage() {
       )
       if (response.ok) {
         const data = await response.json()
-        if (data) {
-          setTodayGoal(data)
+        // data is an array, find the goal for this exercise type
+        const goalForExercise = data.find((g: any) => g.exercise_type === exerciseType)
+        if (goalForExercise) {
+          setTodayGoal(goalForExercise)
         }
       }
     } catch (error) {
@@ -141,7 +145,7 @@ export default function ExercisePage() {
     if (sessionId) {
       try {
         // Update session with final data
-        await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sessions/${sessionId}`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/sessions/${sessionId}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -153,6 +157,14 @@ export default function ExercisePage() {
             completed: true,
           }),
         })
+        
+        // Get the updated session with calculated calories
+        if (response.ok) {
+          const updatedSession = await response.json()
+          if (updatedSession.calories_burned) {
+            setCalories(updatedSession.calories_burned)
+          }
+        }
       } catch (error) {
         console.error('Error updating session:', error)
       }
@@ -358,9 +370,11 @@ export default function ExercisePage() {
                 {/* Estimated Calories */}
                 <div className="mb-6 text-center bg-gradient-to-br from-green-500/20 to-green-600/10 rounded-xl p-6 border border-green-500/30">
                   <div className="text-2xl font-semibold text-white mb-1">
-                    {Math.floor(repCount * 0.5)} cal
+                    {calories > 0 ? calories.toFixed(1) : (repCount * 0.29).toFixed(1)} cal
                   </div>
-                  <div className="text-gray-300 text-sm">Est. Calories Burned</div>
+                  <div className="text-gray-300 text-sm">
+                    {calories > 0 ? 'Calories Burned' : 'Est. Calories'}
+                  </div>
                 </div>
 
                 {/* Exercise Info */}
