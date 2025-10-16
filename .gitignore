@@ -67,3 +67,7 @@ logs/
 # Deployment
 .vercel
 .netlify
+
+# Documentation - Ignore all .md files except README.md
+*.md
+!README.md
