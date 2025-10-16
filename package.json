@@ -1,0 +1,27 @@
+{
+  "name": "fitdetect",
+  "version": "1.0.0",
+  "description": "FitDetect - AI-Powered Fitness Tracking Application",
+  "main": "index.js",
+  "scripts": {
+    "setup": "npm run setup:backend && npm run setup:frontend",
+    "setup:backend": "cd backend && python -m venv venv",
+    "setup:frontend": "cd frontend && npm install",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && uvicorn app.main:app --reload",
+    "dev:frontend": "cd frontend && npm run dev"
+  },
+  "keywords": [
+    "fitness",
+    "AI",
+    "computer-vision",
+    "exercise-tracking",
+    "mediapipe",
+    "opencv"
+  ],
+  "author": "FitDetect Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
