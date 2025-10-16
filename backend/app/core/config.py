@@ -4,7 +4,7 @@ from typing import List
 class Settings(BaseSettings):
     # MongoDB
     MONGODB_URI: str = "mongodb://localhost:27017/fitdetect"
-    DATABASE_NAME: str = "fitdetect"
+    DATABASE_NAME: str = "fit_detect"
     
     # Google OAuth
     GOOGLE_CLIENT_ID: str
