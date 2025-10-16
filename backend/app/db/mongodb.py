@@ -14,7 +14,13 @@ db = Database()
 async def connect_to_mongo():
     """Connect to MongoDB"""
     try:
-        db.client = AsyncIOMotorClient(settings.MONGODB_URI, serverSelectionTimeoutMS=5000)
+        # MongoDB connection with TLS/SSL support for Atlas
+        db.client = AsyncIOMotorClient(
+            settings.MONGODB_URI,
+            serverSelectionTimeoutMS=5000,
+            tls=True,  # Enable TLS
+            tlsAllowInvalidCertificates=False,  # Validate certificates
+        )
         # Test the connection
         await db.client.admin.command('ping')
         db.is_connected = True
