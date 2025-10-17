@@ -17,7 +17,10 @@ class Settings(BaseSettings):
     
     # CORS
     FRONTEND_URL: str = "http://localhost:3000"
-    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",
+        "https://fit-detect.vercel.app"
+    ]
     
     # Environment
     ENVIRONMENT: str = "development"
