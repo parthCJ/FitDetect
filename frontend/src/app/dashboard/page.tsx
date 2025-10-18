@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import InitialGoalSetup from '@/components/InitialGoalSetup'
 import GoalCalendar from '@/components/GoalCalendar'
+import AvatarSelectionModal from '@/components/AvatarSelectionModal'
+import { getAvatarUrl, getInitials } from '@/utils/avatar'
 
 interface Exercise {
   exercise_id: string
@@ -50,6 +52,10 @@ export default function Dashboard() {
     in_progress_goals: 0,
     completion_rate: 0
   })
+  // Avatar state
+  const [userAvatar, setUserAvatar] = useState<string | null>(null)
+  const [showAvatarModal, setShowAvatarModal] = useState(false)
+  const [avatarSelected, setAvatarSelected] = useState(false)
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -66,8 +72,41 @@ export default function Dashboard() {
       fetchTodayGoals()
       fetchGoalStats()
       checkInitialGoalSetup()
+      checkAvatarStatus()
     }
   }, [session])
+
+  const checkAvatarStatus = async () => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/users/me/avatar`,
+        {
+          headers: {
+            Authorization: `Bearer ${(session as any)?.accessToken}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        setUserAvatar(data.avatar)
+        setAvatarSelected(data.avatar_selected)
+        
+        // Show avatar modal if user hasn't selected one yet
+        if (!data.avatar_selected) {
+          setShowAvatarModal(true)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check avatar status:', error)
+    }
+  }
+
+  const handleAvatarSelect = (avatarId: string) => {
+    setUserAvatar(avatarId)
+    setAvatarSelected(true)
+    setShowAvatarModal(false)
+  }
 
   const checkInitialGoalSetup = async () => {
     try {
@@ -291,25 +330,47 @@ export default function Dashboard() {
       <nav className="bg-gray-900/80 backdrop-blur-md shadow-lg border-b border-gray-700 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow-lg">
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow-lg">
+                <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M10.394 2.08a1 1 0 00-.788 0l-7 3a1 1 0 000 1.84L5.25 8.051a.999.999 0 01.356-.257l4-1.714a1 1 0 11.788 1.838L7.667 9.088l1.94.831a1 1 0 00.787 0l7-3a1 1 0 000-1.838l-7-3zM3.31 9.397L5 10.12v4.102a8.969 8.969 0 00-1.05-.174 1 1 0 01-.89-.89 11.115 11.115 0 01.25-3.762zM9.3 16.573A9.026 9.026 0 007 14.935v-3.957l1.818.78a3 3 0 002.364 0l5.508-2.361a11.026 11.026 0 01.25 3.762 1 1 0 01-.89.89 8.968 8.968 0 00-5.35 2.524 1 1 0 01-1.4 0zM6 18a1 1 0 001-1v-2.065a8.935 8.935 0 00-2-.712V17a1 1 0 001 1z" />
                 </svg>
               </div>
-              <Link href="/" className="text-2xl font-bold bg-gradient-to-r from-primary-400 to-blue-400 bg-clip-text text-transparent">
+              <Link href="/" className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-primary-400 to-blue-400 bg-clip-text text-transparent">
                 FitDetect
               </Link>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="hidden sm:flex items-center gap-2 bg-gray-800/60 rounded-full px-4 py-2 border border-gray-700">
-                <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                  {session?.user?.name?.charAt(0).toUpperCase()}
+            <div className="flex items-center gap-2 sm:gap-3">
+              {/* User Profile with Avatar - Clickable to change avatar */}
+              <button
+                onClick={() => setShowAvatarModal(true)}
+                className="flex items-center gap-2 bg-gray-800/60 hover:bg-gray-700/60 rounded-full px-2 sm:px-4 py-2 border border-gray-700 hover:border-primary-500/50 transition-all group"
+                title="Click to change avatar"
+              >
+                <div className="relative">
+                  {userAvatar ? (
+                    <img
+                      src={getAvatarUrl(userAvatar)}
+                      alt="User avatar"
+                      className="w-8 h-8 rounded-full object-cover border-2 border-primary-400 group-hover:border-primary-500 transition-all"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-full flex items-center justify-center text-white text-sm font-semibold group-hover:scale-110 transition-transform">
+                      {getInitials(session?.user?.name || '')}
+                    </div>
+                  )}
+                  {/* Edit indicator on hover */}
+                  <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-primary-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                    <svg className="w-2 h-2 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </div>
                 </div>
-                <span className="text-sm font-medium text-gray-200">
+                <span className="hidden sm:block text-sm font-medium text-gray-200 group-hover:text-white transition-colors">
                   {session?.user?.name}
                 </span>
-              </div>
+              </button>
+
               <button
                 onClick={() => signOut()}
                 className="bg-red-500/20 text-red-400 px-4 py-2 rounded-lg hover:bg-red-500/30 transition-all flex items-center gap-2 text-sm font-medium border border-red-500/30"
@@ -938,10 +999,22 @@ export default function Dashboard() {
                   completed_count: g.completed_count,
                   status: g.status
                 }))}
+                userAvatar={userAvatar}
+                userName={session?.user?.name || undefined}
               />
             </div>
           </div>
         </div>
+      )}
+
+      {/* Avatar Selection Modal */}
+      {showAvatarModal && (
+        <AvatarSelectionModal
+          onSelect={handleAvatarSelect}
+          onClose={avatarSelected ? () => setShowAvatarModal(false) : undefined}
+          isFirstTime={!avatarSelected}
+          accessToken={(session as any)?.accessToken}
+        />
       )}
     </div>
   )
