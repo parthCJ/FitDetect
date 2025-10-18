@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { getAvatarUrl } from '@/utils/avatar'
 
 interface Goal {
   date: string
@@ -15,9 +16,11 @@ interface GoalCalendarProps {
   onSaveGoals?: (goals: Goal[], month: string) => void
   existingGoals?: Goal[]
   readonly?: boolean
+  userAvatar?: string | null
+  userName?: string
 }
 
-export default function GoalCalendar({ onSaveGoals, existingGoals = [], readonly = false }: GoalCalendarProps) {
+export default function GoalCalendar({ onSaveGoals, existingGoals = [], readonly = false, userAvatar, userName }: GoalCalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [goals, setGoals] = useState<Goal[]>(existingGoals)
@@ -223,9 +226,27 @@ export default function GoalCalendar({ onSaveGoals, existingGoals = [], readonly
     <div className="bg-gray-800/60 backdrop-blur-sm rounded-2xl border border-gray-700 p-6">
       {/* Calendar Header */}
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-white">
-          {monthNames[month]} {year}
-        </h2>
+        <div className="flex items-center gap-3">
+          {userAvatar && (
+            <div className="relative group">
+              <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-blue-500/50 shadow-lg ring-2 ring-blue-500/20 transition-all group-hover:ring-blue-500/40 group-hover:scale-105">
+                <img
+                  src={getAvatarUrl(userAvatar)}
+                  alt={userName || 'User avatar'}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              {/* Tooltip */}
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-1 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                {userName ? `${userName}'s Goals` : 'Your Goals'}
+                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
+              </div>
+            </div>
+          )}
+          <h2 className="text-2xl font-bold text-white">
+            {monthNames[month]} {year}
+          </h2>
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => navigateMonth('prev')}
@@ -270,13 +291,13 @@ export default function GoalCalendar({ onSaveGoals, existingGoals = [], readonly
 
       {/* Save Button */}
       {!readonly && onSaveGoals && (
-        <div className="flex justify-between items-center pt-4 border-t border-gray-700">
+        <div className="flex justify-between items-center gap-4 pt-6 mt-2 border-t border-gray-700">
           <p className="text-sm text-gray-400">
             {goals.length} goal{goals.length !== 1 ? 's' : ''} set this month
           </p>
           <button
             onClick={handleSaveAllGoals}
-            className="px-6 py-2 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-semibold hover:from-primary-600 hover:to-primary-700 transition-all shadow-lg"
+            className="px-6 py-2 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-semibold hover:from-primary-600 hover:to-primary-700 transition-all shadow-lg flex-shrink-0"
           >
             Save Goals
           </button>

@@ -34,6 +34,8 @@ class User(BaseModel):
     name: str
     email: EmailStr
     picture: Optional[str] = None
+    avatar: Optional[str] = None  # Selected avatar ID (e.g., "weightlifter-male")
+    avatar_selected: bool = False  # Has user completed avatar selection
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_login: Optional[datetime] = None
     
