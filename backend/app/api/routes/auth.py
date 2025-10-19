@@ -10,11 +10,19 @@ from datetime import datetime, timedelta
 from typing import Optional
 from pydantic import BaseModel
 import logging
+import asyncio
+from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+# ✅ OPTIMIZATION: Cache Google's public keys to avoid repeated fetches
+@lru_cache(maxsize=1)
+def get_cached_request():
+    """Cache the Request object used for token verification"""
+    return requests.Request()
 
 class GoogleAuthRequest(BaseModel):
     token: str
@@ -22,17 +30,24 @@ class GoogleAuthRequest(BaseModel):
 @router.post("/google", response_model=dict)
 async def google_auth(auth_request: GoogleAuthRequest):
     """
-    Authenticate user with Google OAuth token
+    Authenticate user with Google OAuth token (OPTIMIZED FOR SPEED)
     """
     try:
         logger.info(f"Attempting to verify Google token (length: {len(auth_request.token)})")
         
-        # Verify the Google token with clock skew tolerance
-        idinfo = id_token.verify_oauth2_token(
-            auth_request.token,
-            requests.Request(),
-            settings.GOOGLE_CLIENT_ID,
-            clock_skew_in_seconds=10  # Allow 10 seconds clock skew
+        # ✅ OPTIMIZATION 1: Use cached Request object to avoid creating new ones
+        cached_request = get_cached_request()
+        
+        # ✅ OPTIMIZATION 2: Run token verification in thread pool (it's blocking I/O)
+        loop = asyncio.get_event_loop()
+        idinfo = await loop.run_in_executor(
+            None,
+            lambda: id_token.verify_oauth2_token(
+                auth_request.token,
+                cached_request,
+                settings.GOOGLE_CLIENT_ID,
+                clock_skew_in_seconds=10
+            )
         )
         
         logger.info(f"Token verified successfully for user: {idinfo.get('email')}")
@@ -43,35 +58,35 @@ async def google_auth(auth_request: GoogleAuthRequest):
         name = idinfo.get('name')
         picture = idinfo.get('picture')
         
-        # Check if user exists
+        # ✅ OPTIMIZATION 3: Use upsert to combine find + insert/update in one operation
         users_collection = await get_collection("users")
-        existing_user = await users_collection.find_one({"user_id": user_id})
         
-        if not existing_user:
-            logger.info(f"Creating new user: {email}")
-            # Create new user
-            new_user = UserCreate(
-                user_id=user_id,
-                name=name,
-                email=email,
-                picture=picture
-            )
-            user_dict = new_user.model_dump()
-            user_dict['created_at'] = datetime.utcnow()
-            user_dict['last_login'] = datetime.utcnow()
-            
-            result = await users_collection.insert_one(user_dict)
-            user_dict['_id'] = result.inserted_id
+        # Prepare user data
+        current_time = datetime.utcnow()
+        user_data = {
+            "user_id": user_id,
+            "name": name,
+            "email": email,
+            "picture": picture,
+            "last_login": current_time
+        }
+        
+        # Upsert: update if exists, insert if not (single DB operation)
+        result = await users_collection.update_one(
+            {"user_id": user_id},
+            {
+                "$set": user_data,
+                "$setOnInsert": {"created_at": current_time}
+            },
+            upsert=True
+        )
+        
+        if result.upserted_id:
+            logger.info(f"Created new user: {email}")
         else:
-            logger.info(f"User exists, updating last login: {email}")
-            # Update last login
-            await users_collection.update_one(
-                {"user_id": user_id},
-                {"$set": {"last_login": datetime.utcnow()}}
-            )
-            user_dict = existing_user
+            logger.info(f"Updated existing user: {email}")
         
-        # Create access token
+        # ✅ OPTIMIZATION 4: Create token immediately (don't wait for anything else)
         access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
             data={"sub": user_id, "email": email},

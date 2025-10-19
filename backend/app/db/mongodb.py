@@ -14,16 +14,23 @@ class Database:
 db = Database()
 
 async def connect_to_mongo():
-    """Connect to MongoDB with enhanced SSL/TLS support"""
+    """Connect to MongoDB with enhanced SSL/TLS support and performance optimizations"""
     try:
-        # MongoDB connection with TLS/SSL support for Atlas
+        # ✅ OPTIMIZATION: MongoDB connection with connection pooling and fast settings
         # Use certifi for SSL certificate verification (fixes Windows SSL issues)
         db.client = AsyncIOMotorClient(
             settings.MONGODB_URI,
-            serverSelectionTimeoutMS=5000,
+            serverSelectionTimeoutMS=3000,  # Reduced from 5000ms for faster failure detection
+            connectTimeoutMS=3000,  # Connection timeout
+            socketTimeoutMS=5000,  # Socket timeout
+            maxPoolSize=50,  # ✅ Connection pool size (default is 100, adjusted for performance)
+            minPoolSize=10,  # ✅ Maintain minimum connections
+            maxIdleTimeMS=45000,  # Keep connections alive
             tls=True,  # Enable TLS
             tlsAllowInvalidCertificates=False,  # Validate certificates
             tlsCAFile=certifi.where(),  # Use certifi's CA bundle for Windows compatibility
+            retryWrites=True,  # ✅ Retry failed writes
+            retryReads=True,  # ✅ Retry failed reads
         )
         # Test the connection
         await db.client.admin.command('ping')

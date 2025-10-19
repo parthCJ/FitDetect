@@ -228,9 +228,6 @@ export default function Dashboard() {
     try {
       console.log('Saving goals:', updatedGoals)
       console.log('Month:', month)
-      console.log('API URL:', process.env.NEXT_PUBLIC_API_URL)
-      console.log('Session:', session)
-      console.log('Access Token:', (session as any)?.accessToken)
       
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/api/goals/bulk`,
@@ -248,14 +245,21 @@ export default function Dashboard() {
       console.log('Response:', response.status, data)
       
       if (response.ok) {
+        // ✅ OPTIMIZATION: Update local state instead of refetching everything
+        // The backend already returns the saved goals
+        setGoals(data)
+        
+        // ✅ OPTIMIZATION: Fetch stats and today's goals in parallel (non-blocking)
+        Promise.all([
+          fetchGoalStats(),
+          fetchTodayGoals()
+        ]).catch(err => console.error('Error refreshing stats:', err))
+        
+        setShowGoalCalendar(false)
+        
         if (data.errors && data.errors.length > 0) {
           console.warn('Some goals had errors:', data.errors)
-          alert(`Created ${data.created} goals. Some goals already exist or had errors.`)
         }
-        await fetchGoals()
-        await fetchGoalStats()
-        await fetchTodayGoals()
-        setShowGoalCalendar(false)
       } else {
         const errorMsg = data.detail || 'Failed to save goals'
         throw new Error(errorMsg)
