@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import Optional, List
 from datetime import datetime, date, timedelta
 from bson import ObjectId
+from pymongo import UpdateOne
 
 from app.models.goal import (
     GoalCreate, GoalUpdate, GoalResponse, BulkGoalCreate, ExerciseGoal
@@ -77,8 +78,10 @@ async def create_goals_bulk(
     current_user: dict = Depends(get_current_user)
 ):
     """
-    Sync goals for the current month - creates/updates goals from the list,
-    and deletes any goals not in the list for the current month
+    ✅ OPTIMIZED: Sync goals for the current month using bulk operations
+    - Uses bulk_write for all insert/update operations
+    - Single delete_many for cleanup
+    - Reduced from N+1 queries to 3 total queries
     """
     db = await get_database()
     if db is None:
@@ -88,10 +91,6 @@ async def create_goals_bulk(
         )
     
     goals_collection = db["goals"]
-    created_goals = []
-    
-    # Track which goal IDs we're keeping (by date and exercise_type)
-    goals_to_keep = []
     
     # Get the month from the request, or infer from first goal
     current_month = bulk_goals.month
@@ -102,75 +101,94 @@ async def create_goals_bulk(
         else:
             current_month = first_goal_date[:7]  # "YYYY-MM"
     
+    # ✅ OPTIMIZATION 1: Prepare all upsert operations at once
+    bulk_operations = []
+    goals_to_keep = []
+    current_time = datetime.utcnow()
+    
     for goal in bulk_goals.goals:
-        # Check if goal already exists
         goal_date = goal.date.isoformat() if isinstance(goal.date, date) else goal.date
         goals_to_keep.append((goal_date, goal.exercise_type))
         
-        existing = await goals_collection.find_one({
-            "user_id": current_user["id"],
-            "exercise_type": goal.exercise_type,
-            "date": goal_date
-        })
-        
-        if existing:
-            # Update existing goal
-            await goals_collection.update_one(
-                {"_id": existing["_id"]},
-                {"$set": {
-                    "target_count": goal.target_count,
-                    "updated_at": datetime.utcnow()
-                }}
+        # Prepare upsert operation (update if exists, insert if not)
+        bulk_operations.append(
+            UpdateOne(
+                {
+                    "user_id": current_user["id"],
+                    "exercise_type": goal.exercise_type,
+                    "date": goal_date
+                },
+                {
+                    "$set": {
+                        "target_count": goal.target_count,
+                        "updated_at": current_time
+                    },
+                    "$setOnInsert": {
+                        "user_id": current_user["id"],
+                        "exercise_type": goal.exercise_type,
+                        "date": goal_date,
+                        "completed_count": 0,
+                        "status": "pending",
+                        "created_at": current_time
+                    }
+                },
+                upsert=True
             )
-            updated_goal = await goals_collection.find_one({"_id": existing["_id"]})
-            created_goals.append(goal_to_response(updated_goal))
-        else:
-            # Create new goal
-            goal_dict = goal.model_dump()
-            goal_dict["user_id"] = current_user["id"]
-            goal_dict["completed_count"] = 0
-            goal_dict["status"] = "pending"
-            goal_dict["created_at"] = datetime.utcnow()
-            goal_dict["updated_at"] = datetime.utcnow()
-            
-            if isinstance(goal_dict["date"], date):
-                goal_dict["date"] = goal_dict["date"].isoformat()
-            
-            result = await goals_collection.insert_one(goal_dict)
-            goal_dict["_id"] = result.inserted_id
-            created_goals.append(goal_to_response(goal_dict))
+        )
     
-    # Delete goals from the current month that are not in the submitted list
-    if current_month:
-        # Find all goals for the current month
+    # ✅ OPTIMIZATION 2: Execute all operations in a single bulk_write
+    if bulk_operations:
+        await goals_collection.bulk_write(bulk_operations, ordered=False)
+        print(f"[BULK SYNC] Processed {len(bulk_operations)} goals in single operation")
+    
+    # ✅ OPTIMIZATION 3: Delete unwanted goals with single delete_many
+    if current_month and goals_to_keep:
         month_start = f"{current_month}-01"
         month_end = f"{current_month}-31"
         
-        print(f"[BULK SYNC] Month: {current_month}")
-        print(f"[BULK SYNC] Date range: {month_start} to {month_end}")
-        print(f"[BULK SYNC] Goals to keep: {goals_to_keep}")
-        
-        existing_month_goals = await goals_collection.find({
+        # Build a query to delete goals NOT in the goals_to_keep list
+        # MongoDB doesn't have a direct "NOT IN" for tuples, so we use $or with $ne
+        delete_query = {
             "user_id": current_user["id"],
             "date": {"$gte": month_start, "$lte": month_end}
-        }).to_list(length=None)
+        }
         
-        print(f"[BULK SYNC] Found {len(existing_month_goals)} existing goals for this month")
+        # Only delete if the (date, exercise_type) combo is not in goals_to_keep
+        # We'll use $nor to exclude our kept goals
+        exclude_conditions = [
+            {"date": goal_date, "exercise_type": exercise_type}
+            for goal_date, exercise_type in goals_to_keep
+        ]
         
-        # Delete goals that are not in the goals_to_keep list
-        deleted_count = 0
-        for existing_goal in existing_month_goals:
-            goal_key = (existing_goal["date"], existing_goal["exercise_type"])
-            if goal_key not in goals_to_keep:
-                await goals_collection.delete_one({"_id": existing_goal["_id"]})
-                deleted_count += 1
-                print(f"[BULK SYNC] Deleted goal: {goal_key}")
+        if exclude_conditions:
+            delete_query["$nor"] = exclude_conditions
         
-        print(f"[BULK SYNC] Deleted {deleted_count} goals")
-    else:
-        print("[BULK SYNC] No month specified, skipping deletion sync")
+        delete_result = await goals_collection.delete_many(delete_query)
+        print(f"[BULK SYNC] Deleted {delete_result.deleted_count} goals not in the submitted list")
     
-    return created_goals
+    # ✅ OPTIMIZATION 4: Fetch all saved goals in a single query
+    if current_month:
+        month_start = f"{current_month}-01"
+        month_end = f"{current_month}-31"
+        
+        saved_goals = await goals_collection.find({
+            "user_id": current_user["id"],
+            "date": {"$gte": month_start, "$lte": month_end}
+        }).sort("date", 1).to_list(length=100)
+        
+        return [goal_to_response(goal) for goal in saved_goals]
+    
+    # Fallback: fetch the specific goals we just created
+    goal_keys = [(goal_date, exercise_type) for goal_date, exercise_type in goals_to_keep]
+    saved_goals = await goals_collection.find({
+        "user_id": current_user["id"],
+        "$or": [
+            {"date": goal_date, "exercise_type": exercise_type}
+            for goal_date, exercise_type in goal_keys
+        ]
+    }).to_list(length=100)
+    
+    return [goal_to_response(goal) for goal in saved_goals]
 
 @router.get("/goals", response_model=List[GoalResponse])
 async def get_goals(
@@ -334,7 +352,10 @@ async def delete_goal(
 
 @router.get("/goals/stats/summary")
 async def get_goal_stats(current_user: dict = Depends(get_current_user)):
-    """Get goal statistics summary"""
+    """
+    ✅ OPTIMIZED: Get goal statistics using aggregation pipeline
+    - Reduced from 4 separate count queries to 1 aggregation query
+    """
     db = await get_database()
     if db is None:
         raise HTTPException(
@@ -344,31 +365,45 @@ async def get_goal_stats(current_user: dict = Depends(get_current_user)):
     
     goals_collection = db["goals"]
     
-    # Get total goals
-    total_goals = await goals_collection.count_documents({"user_id": current_user["id"]})
+    # ✅ Use aggregation pipeline for a single query
+    pipeline = [
+        {"$match": {"user_id": current_user["id"]}},
+        {
+            "$group": {
+                "_id": None,
+                "total_goals": {"$sum": 1},
+                "completed_goals": {
+                    "$sum": {"$cond": [{"$eq": ["$status", "completed"]}, 1, 0]}
+                },
+                "pending_goals": {
+                    "$sum": {"$cond": [{"$eq": ["$status", "pending"]}, 1, 0]}
+                },
+                "in_progress_goals": {
+                    "$sum": {"$cond": [{"$eq": ["$status", "in_progress"]}, 1, 0]}
+                }
+            }
+        }
+    ]
     
-    # Get completed goals
-    completed_goals = await goals_collection.count_documents({
-        "user_id": current_user["id"],
-        "status": "completed"
-    })
+    result = await goals_collection.aggregate(pipeline).to_list(length=1)
     
-    # Get pending goals
-    pending_goals = await goals_collection.count_documents({
-        "user_id": current_user["id"],
-        "status": "pending"
-    })
+    if not result:
+        return {
+            "total_goals": 0,
+            "completed_goals": 0,
+            "pending_goals": 0,
+            "in_progress_goals": 0,
+            "completion_rate": 0
+        }
     
-    # Get in-progress goals
-    in_progress_goals = await goals_collection.count_documents({
-        "user_id": current_user["id"],
-        "status": "in_progress"
-    })
+    stats = result[0]
+    total = stats["total_goals"]
+    completed = stats["completed_goals"]
     
     return {
-        "total_goals": total_goals,
-        "completed_goals": completed_goals,
-        "pending_goals": pending_goals,
-        "in_progress_goals": in_progress_goals,
-        "completion_rate": (completed_goals / total_goals * 100) if total_goals > 0 else 0
+        "total_goals": total,
+        "completed_goals": completed,
+        "pending_goals": stats["pending_goals"],
+        "in_progress_goals": stats["in_progress_goals"],
+        "completion_rate": (completed / total * 100) if total > 0 else 0
     }
