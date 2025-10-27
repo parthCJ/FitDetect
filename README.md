@@ -164,37 +164,10 @@ npm run dev
 - [ ] Mobile app version (React Native)
 - [ ] Offline mode support
 
-## 🎯 Project Timeline
 
-| Phase | Duration | Deliverables |
-|-------|----------|--------------|
-| Research & Setup | 1 week | Repo setup, OpenCV/Mediapipe installation, Basic detection test |
-| Backend Development | 2 weeks | FastAPI backend, Detection API |
-| Frontend & Auth | 2 weeks | React frontend, OAuth integration |
-| Integration & Testing | 1 week | Connect backend, Test detection, Store data |
-| Deployment | 1 week | Host frontend/backend, Connect MongoDB Atlas |
 
-## ⚠️ Risk Mitigation
-
-| Risk | Mitigation |
-|------|------------|
-| Webcam permission denied | Show retry modal and guide for enabling permissions |
-| Low lighting or camera quality | Implement brightness and motion stability adjustment |
-| High CPU usage | Optimize Mediapipe pipeline and use frame skipping |
-| Network delay | Use local inference and async UI updates |
-
-## 📄 License
-
-MIT License
 
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📞 Support
-
-For support, email support@fitdetect.site or create an issue in the GitHub repository.
-
 ---
-
-Built with ❤️ using AI and Computer Vision
